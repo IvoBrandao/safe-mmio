@@ -1,0 +1,11 @@
+set(SUBMODULE_NAME mmr)
+set(SUBMODULE_TYPE INTERFACE)
+
+set(SUBMODULE_PUB_INCS_DIR ${CMAKE_CURRENT_LIST_DIR}/api)
+
+add_library(${SUBMODULE_NAME} ${SUBMODULE_TYPE})
+target_include_directories(${SUBMODULE_NAME} INTERFACE ${SUBMODULE_PUB_INCS_DIR})
+
+if(NOT CMAKE_CROSSCOMPILING)
+    add_subdirectory(tests)
+endif()

@@ -1,2 +1,6 @@
-add_subdirectory(libSystickDrv)
-add_subdirectory(libMmr)
+add_subdirectory(mmio)
+add_subdirectory(systick)
+
+if(CMAKE_CROSSCOMPILING)
+    add_subdirectory(startup)
+endif()

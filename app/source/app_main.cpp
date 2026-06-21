@@ -1,9 +1,16 @@
 #include "app_main.h"
-#include "Systick.h"
+#include "systick.h"
 
 void app_main() {
+    constexpr mmio::address_t SYSTICK_BASE = 0xE000E010U;
 
-  Systick systick(0, 1000000, 1000);
-  systick.Enable();
-  systick.Disable();
+    hal::Systick systick(SYSTICK_BASE, 180'000'000U, 1'000U);
+    systick.enable();
+
+    volatile auto count = systick.get_count();
+    volatile auto overflow = systick.get_overflow();
+    (void)count;
+    (void)overflow;
+
+    systick.disable();
 }

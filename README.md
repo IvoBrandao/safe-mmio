@@ -1,82 +1,114 @@
-# Memory-Mapped Register Library
+# safe-mmio — Type-Safe Memory-Mapped I/O Library
 
-This is a C++ library for working with memory-mapped registers in embedded systems. It provides a flexible and type-safe way to access and manipulate registers of various sizes.
+A zero-overhead, header-only C++17 library that provides type-safe, compile-time enforced access to memory-mapped hardware registers. Designed for embedded C++ drivers, with an example for STM32 and ARM Cortex-M.
+
+## What It Does
+
+In embedded systems, peripherals (UART, SPI, GPIO, timers) are controlled by reading and writing to specific memory addresses. Traditionally this is done with raw pointer casts and `#define` macros — error-prone, untyped, and hard to test.
+
+**safe-mmio** replaces that with a strongly-typed register abstraction:
+
+```cpp
+// Traditional approach — no type safety, no access control
+#define GPIOA_MODER  (*(volatile uint32_t*)0x48000000)
+GPIOA_MODER |= (1 << 10);  // hope you got the address right
+
+// safe-mmio — compile-time enforced, testable
+mmio::Register<32, mmio::ReadWrite> moder(0x48000000);
+moder.set_bit(10, true);  // type-safe, bounds-checked in debug
+```
 
 ## Features
 
-- Support for memory-mapped registers of 8, 16, 32, and 64 bits.
-- Access control for read-only, write-only, and read-write registers.
-- Bitfield access for individual bits within registers.
-- Type-safe conversions between enums and their underlying types.
+| Feature | Description |
+|---------|-------------|
+| **Register sizes** | 8, 16, 32, 64-bit with matching uint types |
+| **Access policies** | `ReadOnly`, `WriteOnly`, `ReadWrite` — enforced at compile time |
+| **Bit operations** | `set_bit()`, `get_bit()` for single bits |
+| **Field access** | `field(mask, shift)` for multi-bit fields |
+| **Operators** | `=`, `|=`,`&=`,`^=`,`+=`,`-=`,`++`,`--` |
+| **Register blocks** | Group registers at known offsets from a base address |
+| **Three init modes** | Static (compile-time), constructor (runtime), late (two-phase) |
+| **Atomic RMW** | `AtomicRegister` wraps operations in interrupt-safe critical sections |
+| **Zero cost** | No heap, no RTTI, no exceptions, no virtual calls |
+| **Testable** | Registers can point to stack variables for host-side unit testing |
 
-## Usage
+## Quick Start
 
-To use this library in your embedded project, follow these steps:
+```cpp
+#include "mmio.hpp"
+using namespace mmio;
 
-1. Clone the repository to your development environment:
+// Single register
+Register<32, ReadWrite> ctrl(0x40000000);
+ctrl = 0x01;
+ctrl.set_bit(3, true);
 
-    ```sh
-    git clone https://github.com/IvoBrandao/memory-mapped-register-library.git
-    ```
+// Multi-bit field: bits [6:4]
+auto mode = ctrl.field(0x7, 4);
+mode = 0x5;
 
-2. Include the Library Header
+// Register block with offsets
+using UartBlock = DynamicRegisterBlock<
+    at_offset<0x00, 32, ReadWrite>,   // DATA
+    at_offset<0x04, 32, ReadOnly>,    // STATUS
+    at_offset<0x08, 32, ReadWrite>    // CTRL
+>;
 
-    To access the library's functionality in your C++ source code, include the `mmregister.h` header file at the beginning of your source files:
+UartBlock uart(0x40001000);
+uart.get<0>() = 'A';                       // write DATA
+bool tx_empty = uart.get<1>().get_bit(7);   // read STATUS bit
+```
 
-    ```cpp 
-    #include "mmregister.h"
-    ```
+## Building
 
-3. Define and Initialize Registers
+### Unit tests (host)
 
-    Use the Register class to define and initialize memory-mapped registers. Specify the register size (in bits) as a template parameter and provide the memory address of the register as an argument to the constructor. Here's an example of defining a 32-bit read-write register at memory address `0x40000000`:
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+ctest --test-dir build
+```
 
-    ```cpp
-    Register<32> myRegister(0x40000000);
-    ```
+### Firmware (STM32F429ZI)
 
-4. Reading Register Values
+```sh
+cmake -S . -B build-arm \
+    -DCMAKE_TOOLCHAIN_FILE=tools/cmake/arm-none-eabi-gcc.cmake \
+    -DCMAKE_BUILD_TYPE=Release
+cmake --build build-arm
+# Output: Example_Project.elf, .hex, .bin
+```
 
-    To read the value of a register, simply use the register variable in your code. For example:
+## Project Structure
 
-    ```cpp
-    // Read the value of myRegister
-    uint32_t value = myRegister;
-    ```
-    
-    This will store the current value of the register in the value variable
+```
+├── app/                    Application layer
+│   ├── api/                Public headers
+│   ├── source/             main.cpp, app_main.cpp
+│   └── tests/              Integration tests
+├── libs/
+│   ├── mmio/               Header-only MMIO library
+│   │   ├── api/            Public headers (mmio.hpp, mmio_register.hpp, ...)
+│   │   ├── docs/           Architecture & usage documentation
+│   │   └── tests/          Unit tests (mocks, fakes, test sources)
+│   ├── systick/            SysTick peripheral driver (example)
+│   │   ├── api/            Public header (systick.h)
+│   │   ├── source/         Implementation
+│   │   └── tests/          Unit tests (mocks, fakes, test sources)
+│   └── startup/            STM32F429ZI startup & linker script
+│       ├── source/         Vector table, Reset_Handler
+│       └── STM32F429ZITx.ld
+└── tools/cmake/            Toolchain files & CMake modules
+```
 
-5. Writing Register Values  
-    
-    To write a value to a register, use the assignment operator (=) with the register variable. For example:
+## Documentation
 
-    ```cpp
-    // Write the value 0x12345678 to myRegister
-    myRegister = 0x12345678;
-    ```
-    This will update the register's value to 0x12345678.
+Detailed architecture diagrams and usage guides are in [`libs/mmio/docs/`](libs/mmio/docs/):
 
-6. Accessing Individual Bits
-
-    The library provides a Bitfield class for accessing individual bits within registers. You can use the Bitfield class to read, write, and manipulate specific bits. Here's an example:
-
-    ```cpp
-    // Example usage for a 16-bit read-write register at address 0x40000004
-    Register<16> statusRegister(0x40000004);
-
-    // Access bit 3 of the register
-    Register<16>::Bitfield bit3 = statusRegister[3];
-
-    // Read the value of bit 3
-    bool isBitSet = bit3;
-
-    // Set bit 3 to 1
-    bit3 = 1;
-
-    ```
-
-    Use the Bitfield class to interact with individual bits when needed.
-
+- [Architecture](libs/mmio/docs/01-arch.md) — module structure, class diagram, design decisions
+- [Usage Guide](libs/mmio/docs/usage.md) — initialization modes, driver patterns, testing
 
 ## License
-This library is provided under the MIT License. See the LICENSE file for details.
+
+MIT License. See LICENSE for details.
