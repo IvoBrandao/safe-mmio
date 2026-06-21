@@ -135,8 +135,8 @@ graph LR
     RW -->|inherits| WO
 
     subgraph "SFINAE gates"
-        R[read / get_bit / operator T]
-        W[write / set_bit / operator= / |= / &=]
+        R["read / get_bit / operator T"]
+        W["write / set_bit / operator= / compound assign"]
     end
 
     RO -.->|enables| R
